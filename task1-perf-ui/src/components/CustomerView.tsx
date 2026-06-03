@@ -70,7 +70,7 @@ export default function CustomerView() {
   }, [models, selectedProfile]);
 
   const chartData = useMemo(
-    () => summaries.map((s) => ({ name: s.name, 'Gen Speed': s.genSpeed, TTFT: s.ttftMs, RPM: s.rpm })),
+    () => summaries.map((s) => ({ name: `Model ${s.name}`, 'Gen Speed': s.genSpeed, TTFT: s.ttftMs, RPM: s.rpm })),
     [summaries]
   );
 
@@ -193,7 +193,7 @@ export default function CustomerView() {
                       const speed = profile?.configs[0]?.genSpeed;
                       return (
                         <td key={p} className="py-2 px-2 text-center tabular-nums">
-                          {speed != null ? fmt(speed) : '-'}
+                          {speed != null ? `${fmt(speed)} t/s` : '-'}
                         </td>
                       );
                     })}

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
-  LineChart,
-  Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
@@ -61,17 +61,22 @@ export default function EngineerView() {
   }, [flatRows, sortField, sortDir]);
 
   const batchScalingData = useMemo(() => {
-    const modelNames = [...new Set(flatRows.map((r) => r.modelName))].sort();
+    const names = [...new Set(flatRows.map((r) => r.modelName))].sort();
     const batchSizes = [...new Set(flatRows.map((r) => r.batchSize))].sort((a, b) => a - b);
-    return batchSizes.map((bs) => {
-      const point: Record<string, number | string> = { batchSize: bs };
-      for (const name of modelNames) {
+    return names.map((name) => {
+      const point: Record<string, number | string> = { model: `Model ${name}` };
+      for (const bs of batchSizes) {
         const row = flatRows.find((r) => r.modelName === name && r.batchSize === bs);
-        if (row) point[name] = row[metricY];
+        if (row) point[`BS ${bs}`] = row[metricY];
       }
       return point;
     });
   }, [flatRows, metricY]);
+
+  const batchSizes = useMemo(
+    () => [...new Set(flatRows.map((r) => r.batchSize))].sort((a, b) => a - b),
+    [flatRows]
+  );
 
   const scatterData = useMemo(() => {
     return flatRows
@@ -99,9 +104,8 @@ export default function EngineerView() {
     else { setSortField(field); setSortDir('asc'); }
   };
 
-  const modelNames = [...new Set(flatRows.map((r) => r.modelName))].sort();
-  const allColumns: (keyof ConfigRow)[] = [
-    'inputLength', 'outputLength', 'cachePercent', 'batchSize',
+  const tableColumns: (keyof ConfigRow)[] = [
+    'batchSize',
     'genSpeed', 'ttftMs', 'throughput', 'throughputPerBox', 'rpm',
     'promptOnlyThroughput', 'genOnlyThroughput',
     'uncachedThroughput', 'cachedThroughput',
@@ -109,6 +113,15 @@ export default function EngineerView() {
     'maxMs', 'targetMaxMs',
     'uncachedThroughputPerBox', 'cachedThroughputPerBox',
   ];
+
+  const groupedByModel = useMemo(() => {
+    const groups: { modelName: string; rows: FlatRow[] }[] = [];
+    const modelOrder = [...new Set(sorted.map((r) => r.modelName))];
+    for (const name of modelOrder) {
+      groups.push({ modelName: name, rows: sorted.filter((r) => r.modelName === name) });
+    }
+    return groups;
+  }, [sorted]);
 
   const metricOptions: (keyof ConfigRow)[] = [
     'genSpeed', 'ttftMs', 'throughput', 'throughputPerBox', 'rpm',
@@ -133,8 +146,21 @@ export default function EngineerView() {
     return `rgb(${r},${g},${b})`;
   };
 
+  const profileInfo = flatRows[0];
+
   return (
     <div className="space-y-6">
+      {profileInfo && (
+        <div className="bg-gray-50 rounded-lg p-4">
+          <h3 className="text-lg font-semibold text-gray-800">
+            {PROFILE_DESCRIPTIONS[selectedProfile] || `Profile ${selectedProfile}`}
+          </h3>
+          <p className="text-sm text-gray-500 mt-1">
+            {fmt(profileInfo.inputLength, 0)} input tokens, {fmt(profileInfo.outputLength, 0)} output, {(profileInfo.cachePercent * 100).toFixed(0)}% cache
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center gap-4 flex-wrap">
         <label className="text-sm font-medium text-gray-700">Metric:</label>
         <select
@@ -148,20 +174,23 @@ export default function EngineerView() {
         </select>
       </div>
 
-      {/* Full data table */}
+      {/* Full data table — grouped by model */}
       <div className="bg-white rounded-lg border overflow-hidden">
         <h3 className="text-sm font-semibold text-gray-700 p-4 pb-2">Configuration Details</h3>
+        <p className="text-xs text-gray-400 px-4 pb-2">
+          Per-batch-size configurations. Profile constants (Input/Output/Cache) are shown in the banner above.
+        </p>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b bg-gray-50">
                 <th
-                  className="py-2 px-3 text-left cursor-pointer hover:bg-gray-100"
+                  className="py-2 px-3 text-left cursor-pointer hover:bg-gray-100 sticky left-0 bg-gray-50 z-10"
                   onClick={() => toggleSort('modelName')}
                 >
                   Model {sortField === 'modelName' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
                 </th>
-                {allColumns.map((col) => (
+                {tableColumns.map((col) => (
                   <th
                     key={col}
                     className="py-2 px-3 text-right cursor-pointer hover:bg-gray-100 whitespace-nowrap"
@@ -173,22 +202,29 @@ export default function EngineerView() {
               </tr>
             </thead>
             <tbody>
-              {sorted.map((row, i) => (
-                <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
-                  <td className="py-1.5 px-3 font-medium">Model {row.modelName}</td>
-                  {allColumns.map((col) => (
-                    <td key={col} className="py-1.5 px-3 text-right tabular-nums">
-                      {col === 'cachePercent'
-                        ? (row[col] * 100).toFixed(0) + '%'
-                        : col === 'ttftMs'
-                        ? fmtMs(row[col])
-                        : typeof row[col] === 'number'
-                        ? fmt(row[col])
-                        : row[col]}
+              {groupedByModel.map((group) =>
+                group.rows.map((row, ri) => (
+                  <tr
+                    key={`${group.modelName}-${ri}`}
+                    className={`hover:bg-gray-50 ${ri === 0 ? 'border-t-2 border-gray-200' : 'border-t border-gray-100'}`}
+                  >
+                    <td className="py-1.5 px-3 font-medium sticky left-0 bg-white z-10">
+                      {ri === 0 ? `Model ${group.modelName}` : ''}
                     </td>
-                  ))}
-                </tr>
-              ))}
+                    {tableColumns.map((col) => (
+                      <td key={col} className="py-1.5 px-3 text-right tabular-nums">
+                        {col === 'cachePercent'
+                          ? (row[col] * 100).toFixed(0) + '%'
+                          : col === 'ttftMs'
+                          ? fmtMs(row[col])
+                          : typeof row[col] === 'number'
+                          ? fmt(row[col])
+                          : row[col]}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -199,17 +235,17 @@ export default function EngineerView() {
         <h3 className="text-sm font-semibold text-gray-700 mb-4">
           Batch Size Scaling — {COLUMN_LABELS[metricY]}
         </h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={batchScalingData}>
+        <ResponsiveContainer width="100%" height={350}>
+          <BarChart data={batchScalingData} barCategoryGap="20%">
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="batchSize" tick={{ fontSize: 12 }} label={{ value: 'Batch Size', position: 'insideBottom', offset: -5, fontSize: 12 }} />
+            <XAxis dataKey="model" tick={{ fontSize: 12 }} />
             <YAxis tick={{ fontSize: 12 }} />
             <Tooltip />
             <Legend />
-            {modelNames.map((name, i) => (
-              <Line key={name} type="monotone" dataKey={name} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={{ r: 3 }} />
+            {batchSizes.map((bs, i) => (
+              <Bar key={bs} dataKey={`BS ${bs}`} fill={COLORS[i % COLORS.length]} radius={[2, 2, 0, 0]} />
             ))}
-          </LineChart>
+          </BarChart>
         </ResponsiveContainer>
       </div>
 
@@ -236,11 +272,7 @@ export default function EngineerView() {
                 </div>
               );
             }} />
-            <Scatter data={scatterData} fill={COLORS[0]}>
-              {scatterData.map((_, i) => (
-                <circle key={i} />
-              ))}
-            </Scatter>
+            <Scatter data={scatterData} fill={COLORS[0]} />
           </ScatterChart>
         </ResponsiveContainer>
         <div className="flex flex-wrap gap-2 mt-2">
