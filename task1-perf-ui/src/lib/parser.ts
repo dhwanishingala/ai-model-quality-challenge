@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import type { ConfigRow, ProfileData, ModelData, ModelsMap, SerializedModels } from './types';
+import type { ConfigRow, ProfileData, ModelsMap, SerializedModels } from './types';
 
 const FILENAME_REGEX = /Model\s+(.+?)\s+profile\s+(\d+)/i;
 
