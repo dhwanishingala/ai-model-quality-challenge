@@ -1,2 +1,6 @@
 perf_data/
 .DS_Store
+task2-benchmark-pruning/evalscope/
+task2-benchmark-pruning/.venv/
+task2-benchmark-pruning/analysis/figures/
+task2-benchmark-pruning/analysis/__pycache__/
